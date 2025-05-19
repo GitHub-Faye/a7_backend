@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        .response {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>A7 API 测试页面</h1>
+
+    <div class="section">
+        <h2>JWT令牌获取</h2>
+        <input type="text" id="username" placeholder="用户名" value="admin">
+        <input type="password" id="password" placeholder="密码" value="admin123">
+        <button onclick="getToken()">获取令牌</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="token-response"></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>用户注册</h2>
+        <input type="text" id="reg-username" placeholder="用户名">
+        <input type="email" id="reg-email" placeholder="电子邮箱">
+        <input type="password" id="reg-password" placeholder="密码">
+        <input type="password" id="reg-password2" placeholder="确认密码">
+        <select id="reg-role">
+            <option value="student">学生</option>
+            <option value="teacher">教师</option>
+            <option value="admin">管理员</option>
+        </select>
+        <button onclick="register()">注册</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="register-response"></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>获取当前用户信息</h2>
+        <button onclick="getUserInfo()">获取用户信息</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="user-info-response"></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>获取用户资料</h2>
+        <button onclick="getProfile()">获取资料</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="profile-response"></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>修改用户资料</h2>
+        <input type="text" id="bio" placeholder="个人简介">
+        <input type="text" id="specialization" placeholder="专业领域">
+        <input type="text" id="first-name" placeholder="名">
+        <input type="text" id="last-name" placeholder="姓">
+        <button onclick="updateProfile()">更新资料</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="update-profile-response"></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>修改密码</h2>
+        <input type="password" id="old-password" placeholder="旧密码">
+        <input type="password" id="new-password" placeholder="新密码">
+        <input type="password" id="confirm-password" placeholder="确认新密码">
+        <button onclick="changePassword()">修改密码</button>
+        <div>
+            <h3>响应:</h3>
+            <pre class="response" id="change-password-response"></pre>
+        </div>
+    </div>
+
+    <script>
+        // API基础URL
+        const API_BASE_URL = 'http://localhost:8000/api/auth/';
+        
+        // 保存JWT令牌
+        let accessToken = localStorage.getItem('accessToken');
+        let refreshToken = localStorage.getItem('refreshToken');
+
+        // 获取令牌函数
+        async function getToken() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}token/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('token-response').textContent = JSON.stringify(data, null, 2);
+                
+                // 保存令牌到localStorage
+                if (data.access) {
+                    localStorage.setItem('accessToken', data.access);
+                    accessToken = data.access;
+                }
+                if (data.refresh) {
+                    localStorage.setItem('refreshToken', data.refresh);
+                    refreshToken = data.refresh;
+                }
+            } catch (error) {
+                document.getElementById('token-response').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        // 用户注册函数
+        async function register() {
+            const username = document.getElementById('reg-username').value;
+            const email = document.getElementById('reg-email').value;
+            const password = document.getElementById('reg-password').value;
+            const password2 = document.getElementById('reg-password2').value;
+            const role = document.getElementById('reg-role').value;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}register/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        username, 
+                        email, 
+                        password, 
+                        password2, 
+                        role 
+                    })
+                });
+                
+                const data = await response.json();
+                document.getElementById('register-response').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('register-response').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        // 获取用户信息
+        async function getUserInfo() {
+            if (!accessToken) {
+                document.getElementById('user-info-response').textContent = '请先获取令牌';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}me/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('user-info-response').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('user-info-response').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        // 获取用户资料
+        async function getProfile() {
+            if (!accessToken) {
+                document.getElementById('profile-response').textContent = '请先获取令牌';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}profile/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('profile-response').textContent = JSON.stringify(data, null, 2);
+
+                // 填充表单
+                if (data.bio) document.getElementById('bio').value = data.bio;
+                if (data.specialization) document.getElementById('specialization').value = data.specialization;
+                if (data.first_name) document.getElementById('first-name').value = data.first_name;
+                if (data.last_name) document.getElementById('last-name').value = data.last_name;
+            } catch (error) {
+                document.getElementById('profile-response').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        // 更新用户资料
+        async function updateProfile() {
+            if (!accessToken) {
+                document.getElementById('update-profile-response').textContent = '请先获取令牌';
+                return;
+            }
+
+            const bio = document.getElementById('bio').value;
+            const specialization = document.getElementById('specialization').value;
+            const firstName = document.getElementById('first-name').value;
+            const lastName = document.getElementById('last-name').value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}profile/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        bio,
+                        specialization,
+                        first_name: firstName,
+                        last_name: lastName
+                    })
+                });
+                
+                const data = await response.json();
+                document.getElementById('update-profile-response').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('update-profile-response').textContent = `错误: ${error.message}`;
+            }
+        }
+
+        // 修改密码
+        async function changePassword() {
+            if (!accessToken) {
+                document.getElementById('change-password-response').textContent = '请先获取令牌';
+                return;
+            }
+
+            const oldPassword = document.getElementById('old-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}password-change/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        old_password: oldPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+                
+                const data = await response.json();
+                document.getElementById('change-password-response').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('change-password-response').textContent = `错误: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -46,6 +46,8 @@ a7_backend/
 │   │   ├── apps.py          # 应用配置
 │   │   ├── migrations/      # 数据库迁移文件
 │   │   ├── models.py        # 用户数据模型
+│   │   ├── serializers.py   # REST API序列化器
+│   │   ├── urls.py          # 用户模块URL配置
 │   │   ├── tests.py         # 用户功能测试
 │   │   └── views.py         # 用户相关视图和 API
 │   ├── db.sqlite3           # SQLite 数据库文件
@@ -59,13 +61,15 @@ a7_backend/
 │   └── ...
 │   ├── tasks.json           # 任务定义数据
 │   └── tasks.json.bak       # 任务文件备份
+├── test_html/               # API测试页面目录
+│   └── test_api.html        # API测试页面
 ├── .env.example             # 环境变量示例文件
 ├── .gitignore               # Git 忽略文件配置
 ├── .roomodes                # Roo 模式配置文件
 ├── .taskmasterconfig        # TaskMaster 配置文件
 ├── .windsurfrules           # Windsurf 规则配置
 ├── a7_backend.code-workspace # VS Code 工作区配置
-├── library.md               # 项目库文档
+├── library.md               # 项目使用的库和依赖说明
 └── prd.txt                  # 产品需求文档
 ```
 
@@ -89,9 +93,11 @@ a7_backend/
   - `views.py`：实现 AI 相关 API 端点
 
 - **a7/users/**：用户管理模块
-  - `models.py`：扩展 Django 用户模型
+  - `models.py`：扩展 Django 用户模型（UserProfile一对一关联User）
   - `admin.py`：配置用户管理界面
-  - `views.py`：用户相关 API 实现
+  - `views.py`：用户相关 API 实现（登录、注册、密码修改等）
+  - `serializers.py`：用户相关数据序列化（JWT令牌、用户资料等）
+  - `urls.py`：用户模块URL配置（认证端点、用户资料等）
 
 - **a7/courses/**：课程管理模块，处理课程、章节、知识点等
 
@@ -103,8 +109,6 @@ a7_backend/
 
 - **.taskmasterconfig**：TaskMaster AI 工具配置，定义使用的 AI 模型和参数
 
-- **.env.example**：环境变量模板，包含必要的 API 密钥和配置参数
-
 - **.gitignore**：定义 Git 版本控制应忽略的文件和目录
 
 ### 任务管理
@@ -115,33 +119,42 @@ a7_backend/
 
 - **scripts/task-complexity-report.json**：任务复杂度分析报告
 
-### 项目文档
+### 项目文档和测试
 
 - **prd.txt**：详细的产品需求文档，描述系统功能和数据模型
 
 - **library.md**：项目使用的库和依赖说明
 
+- **test_html/test_api.html**：前端API测试页面，用于测试后端API功能
+
 ## 关键文件之间的关系
 
 1. **配置与执行流程**
-   - `a7/a7/settings.py` 定义全局配置
+   - `a7/a7/settings.py` 定义全局配置（REST Framework、JWT、CORS等）
    - `a7/a7/urls.py` 根据配置路由请求到各模块的视图
+   - 各模块的 `urls.py` 定义具体API端点
    - 各模块的 `views.py` 处理请求并与 `models.py` 交互
    - `manage.py` 作为入口点执行各种 Django 命令
 
-2. **数据模型关系**
-   - `users/models.py` 定义基础用户模型
+2. **认证与授权流程**
+   - `settings.py` 中配置REST Framework使用JWT认证
+   - `users/serializers.py` 定义JWT令牌序列化逻辑和用户数据序列化
+   - `users/views.py` 实现JWT令牌获取、注册、密码修改等认证功能
+   - `users/urls.py` 定义认证相关API端点路由
+
+3. **数据模型关系**
+   - `users/models.py` 定义基础用户模型和用户资料模型
    - `courses/models.py` 定义课程相关模型，关联用户模型
    - `resources/models.py` 定义资源模型，关联课程模型
    - `analytics/models.py` 定义分析模型，关联用户和课程模型
    - `ai_services/models.py` 定义 AI 交互模型，关联用户和资源模型
 
-3. **AI 服务集成**
+4. **AI 服务集成**
    - `ai_services/models.py` 定义 AI 交互记录和缓存
    - `ai_services/utils.py` 实现 AI API 调用和缓存逻辑
    - `ai_services/views.py` 暴露 AI 服务 API 端点
 
-4. **任务管理与开发流程**
+5. **任务管理与开发流程**
    - `tasks/tasks.json` 定义开发任务和进度
    - `tasks/task_XXX.txt` 详细描述各任务
    - `.taskmasterconfig` 配置 TaskMaster AI 工具
@@ -151,6 +164,7 @@ a7_backend/
 1. **Django 应用结构**
    - 遵循 Django 标准应用结构，每个功能模块作为一个独立应用
    - 每个应用包含 `models.py`、`views.py`、`admin.py` 等标准文件
+   - REST Framework相关文件包括 `serializers.py`、`urls.py` 等
    - 共享配置放在 `a7/a7/` 目录中
 
 2. **模块化设计**
@@ -162,6 +176,7 @@ a7_backend/
    - 开发工具配置文件放在项目根目录
    - 开发任务和文档放在专用目录（`tasks/`、`scripts/`）
    - AI 工具规则放在 `.roo/` 目录下
+   - 测试工具（如test_html/test_api.html）放在专用测试目录
 
 ## 命名约定
 
@@ -171,15 +186,16 @@ a7_backend/
    - 任务文件使用下划线加序号格式：`task_001.txt`
 
 2. **模型命名**
-   - 模型类使用 PascalCase（大驼峰）：`User`、`Course`、`Resource`
+   - 模型类使用 PascalCase（大驼峰）：`User`、`UserProfile`、`Course`
    - 字段名使用 snake_case（下划线）：`created_at`、`knowledge_points`
    - 关联字段名反映实体关系：`course.chapters`（一对多）
 
 3. **API 端点命名**
-   - RESTful 风格，使用复数名词：`/api/courses/`
+   - RESTful 风格，使用复数名词：`/api/auth/users/`
    - 资源操作通过 HTTP 方法表示：GET、POST、PUT、DELETE
+   - 认证相关端点使用动词或名词：`/api/auth/token/`、`/api/auth/register/`
    - 子资源使用嵌套路径：`/api/courses/{id}/chapters/`
-   - 操作性 API 使用连字符命名：`/api/ai/teaching-design/`
+   - 操作性 API 使用连字符命名：`/api/auth/password-reset/`
 
 4. **Django 应用命名**
    - 功能相关：`courses`、`resources`
@@ -195,6 +211,9 @@ a7_backend/
 ## 配置管理
 
 - 敏感配置（API 密钥等）通过环境变量提供，参考 `.env.example`
+- JWT认证相关配置（令牌有效期等）在 `settings.py` 中的 `SIMPLE_JWT` 字典中
+- REST Framework配置在 `settings.py` 中的 `REST_FRAMEWORK` 字典中
+- CORS跨域配置在 `settings.py` 中的 `CORS_ALLOW_ALL_ORIGINS` 等设置中
 - 项目固定配置在 `settings.py` 中定义
 - AI 工具配置在 `.taskmasterconfig` 中管理
 - 开发工具配置在各自的配置文件中（`.roomodes`、`.windsurfrules`） 
