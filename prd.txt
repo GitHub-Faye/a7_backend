@@ -1,0 +1,390 @@
+<context>
+# Overview  
+教育AI助手系统后端是一个基于Django框架的API服务，负责处理教学内容生成、考核题目管理、学情数据分析等核心功能。后端系统通过集成大模型API，为教师提供智能备课工具，为学生提供个性化学习支持，为管理员提供数据可视化和用户管理功能。该后端系统解决了传统教育系统中数据孤岛、人工批改繁重、学情分析困难等技术问题。
+
+# Core Features  
+## 教师侧API
+- **教学内容生成API**：接收课程大纲和知识参数，调用大模型生成教学内容，返回结构化教案数据。
+- **考核内容生成API**：根据课程章节和难度参数，调用大模型生成多类型考核题目及标准答案。
+- **学情数据分析API**：处理学生提交数据，分析错误模式，生成教学优化建议，支持批量和个体分析。
+
+## 学生侧API
+- **智能问答API**：处理学生提问，结合课程内容上下文进行精准回答，支持技术代码解释。
+- **练习评测API**：接收学生提交答案，进行自动评分，返回错误分析和修正建议。
+
+## 管理侧API
+- **用户管理API**：基于Django权限系统，处理用户CRUD、角色分配和认证。
+- **资源管理API**：实现课件、练习等资源的存储、检索和导出功能。
+- **数据统计API**：聚合用户行为和学习数据，生成各类统计报表。
+
+# 数据交互需求  
+## 系统交互流程
+- 教师端请求内容生成 → 后端处理请求 → 调用AI服务 → 结构化返回内容
+- 学生提交答案 → 后端验证格式 → 评测逻辑处理 → 返回评分和反馈
+- 管理端请求数据统计 → 后端聚合查询 → 处理计算 → 返回标准格式数据
+
+## API响应要求
+- 所有API响应统一JSON格式，包含状态码、消息和数据字段
+- 批量操作支持异步处理和任务状态查询
+- 错误信息标准化，包含详细的问题描述和可能的解决方案
+</context>
+<PRD>
+# Technical Architecture  
+## 系统组件
+- **核心服务层**：Django应用服务器，处理请求和业务逻辑
+- **数据存储层**：SQLite数据库(Django默认)，存储用户、课程和学习数据
+- **AI服务层**：大模型API集成模块，处理内容生成和智能分析
+- **API网关**：请求路由、认证和限流处理
+- **后台任务队列**：处理异步任务和定时作业(使用Django内置机制)
+
+## 数据模型详细设计
+```python
+# 用户模块(使用Django自带)
+# django.contrib.auth.models.User
+# django.contrib.auth.models.Group
+
+# 课程模型
+class Course(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField()
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class Chapter(models.Model):
+    course = models.ForeignKey(Course, related_name='chapters', on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    order = models.IntegerField()
+
+class KnowledgePoint(models.Model):
+    chapter = models.ForeignKey(Chapter, related_name='knowledge_points', on_delete=models.CASCADE)
+    content = models.TextField()
+    importance = models.IntegerField(choices=[(1, '低'), (2, '中'), (3, '高')])
+
+# 资源模型
+class Resource(models.Model):
+    RESOURCE_TYPES = [
+        ('lecture', '讲义'),
+        ('exercise', '练习'),
+        ('exam', '考核'),
+    ]
+    type = models.CharField(max_length=20, choices=RESOURCE_TYPES)
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    course = models.ForeignKey(Course, related_name='resources', on_delete=models.CASCADE)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class Exercise(models.Model):
+    DIFFICULTY_LEVELS = [(1, '简单'), (2, '中等'), (3, '困难')]
+    resource = models.ForeignKey(Resource, related_name='exercises', on_delete=models.CASCADE)
+    content = models.TextField()
+    answer = models.TextField()
+    difficulty = models.IntegerField(choices=DIFFICULTY_LEVELS)
+    knowledge_points = models.ManyToManyField(KnowledgePoint)
+
+# 学习记录
+class StudentProgress(models.Model):
+    STATUS_CHOICES = [
+        ('not_started', '未开始'),
+        ('in_progress', '学习中'),
+        ('completed', '已完成'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    last_accessed = models.DateTimeField(auto_now=True)
+
+class SubmissionRecord(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE)
+    content = models.TextField()
+    score = models.FloatField()
+    feedback = models.TextField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+# AI交互
+class AIInteraction(models.Model):
+    INTERACTION_TYPES = [
+        ('teaching_design', '教学设计'),
+        ('exercise_generation', '习题生成'),
+        ('answer_analysis', '答案分析'),
+        ('qa', '问答'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    type = models.CharField(max_length=20, choices=INTERACTION_TYPES)
+    query = models.TextField()
+    response = models.TextField()
+    tokens_used = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+class AICache(models.Model):
+    query_hash = models.CharField(max_length=64, unique=True)
+    response = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    hits = models.IntegerField(default=0)
+```
+
+## API接口详细设计
+```
+# 认证接口
+POST /api/auth/login/ - 用户登录
+POST /api/auth/logout/ - 用户登出
+POST /api/auth/password_reset/ - 密码重置
+
+# 课程管理接口
+GET /api/courses/ - 课程列表
+POST /api/courses/ - 创建课程
+GET /api/courses/{id}/ - 获取课程详情
+PUT /api/courses/{id}/ - 更新课程
+DELETE /api/courses/{id}/ - 删除课程
+GET /api/courses/{id}/chapters/ - 获取课程章节
+POST /api/courses/{id}/chapters/ - 创建章节
+
+# 资源管理接口
+GET /api/resources/ - 资源列表
+POST /api/resources/ - 创建资源
+GET /api/resources/{id}/ - 获取资源详情
+GET /api/resources/{id}/exercises/ - 获取资源习题
+
+# AI教学服务接口
+POST /api/ai/teaching-design/ - 生成教学内容
+POST /api/ai/exercise-generate/ - 生成习题
+POST /api/ai/answer-analysis/ - 分析答案
+POST /api/ai/qa/ - 学生问答
+
+# 学习记录接口
+GET /api/progress/{user_id}/ - 获取学习进度
+POST /api/submissions/ - 提交答案
+GET /api/submissions/{user_id}/ - 获取提交记录
+
+# 统计分析接口
+GET /api/stats/teacher-usage/ - 教师使用统计
+GET /api/stats/student-usage/ - 学生使用统计
+GET /api/stats/course-performance/ - 课程表现分析
+GET /api/stats/knowledge-mastery/ - 知识点掌握情况
+```
+
+## AI服务集成实现
+```python
+# ai_services/utils.py
+import requests
+import hashlib
+import json
+from django.conf import settings
+from ..models import AICache, AIInteraction
+
+class AIService:
+    def __init__(self):
+        self.api_key = settings.AI_API_KEY
+        self.api_url = settings.AI_API_URL
+        self.model = settings.AI_MODEL
+        self.cache_enabled = settings.AI_CACHE_ENABLED
+        
+    def _get_cache(self, params):
+        """尝试从缓存获取响应"""
+        query_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
+        try:
+            cache = AICache.objects.get(query_hash=query_hash)
+            cache.hits += 1
+            cache.save()
+            return cache.response
+        except AICache.DoesNotExist:
+            return None
+    
+    def _set_cache(self, params, response):
+        """缓存响应结果"""
+        query_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
+        AICache.objects.create(
+            query_hash=query_hash,
+            response=response
+        )
+    
+    def call_ai_api(self, prompt, user_id, interaction_type, system_prompt="", temperature=0.7, max_tokens=2000):
+        """调用AI API并记录交互"""
+        params = {
+            "prompt": prompt,
+            "system_prompt": system_prompt,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        # 检查缓存
+        if self.cache_enabled:
+            cached_response = self._get_cache(params)
+            if cached_response:
+                return json.loads(cached_response)
+        
+        # 准备API请求
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        # 发送请求
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data)
+            response.raise_for_status()
+            result = response.json()
+            
+            # 记录交互
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            tokens_used = result.get("usage", {}).get("total_tokens", 0)
+            
+            AIInteraction.objects.create(
+                user_id=user_id,
+                type=interaction_type,
+                query=prompt,
+                response=content,
+                tokens_used=tokens_used
+            )
+            
+            # 缓存结果
+            if self.cache_enabled:
+                self._set_cache(params, response.text)
+            
+            return result
+        except Exception as e:
+            # 记录错误
+            AIInteraction.objects.create(
+                user_id=user_id,
+                type=interaction_type,
+                query=prompt,
+                response=f"错误: {str(e)}",
+                tokens_used=0
+            )
+            raise e
+```
+
+## 部署与配置
+- Django设置文件分离为base, development, production
+- 使用环境变量管理敏感配置
+- 支持SQLite(开发)和其他数据库(生产)切换
+- 静态文件和媒体文件采用标准Django配置
+
+# Development Roadmap  
+## MVP阶段(后端)
+- 搭建基础Django项目结构
+- 实现用户认证和权限系统(利用Django内置)
+- 设计并实现核心数据模型
+- 构建基本RESTful API
+- 集成大模型API基础功能
+- 实现简单的教学内容生成API
+- 开发基础练习评测功能
+- 设计简单的数据统计API
+
+## 增强阶段(后端)
+- 优化AI服务层架构，实现缓存机制
+- 扩展AI内容生成功能，支持完整教案
+- 实现更精准的练习评测算法
+- 开发详细的学情分析API
+- 构建批量资源管理和导出功能
+- 增强数据聚合和统计能力
+- 实现异步任务处理
+
+## 完善阶段(后端)
+- AI提示词优化和专业领域自定义
+- 实现多元评测系统和自适应题目生成
+- 构建学习路径和知识图谱API
+- 开发高级数据分析和预测功能
+- 优化系统性能和安全性
+- 添加API扩展点和webhook机制
+- 实现第三方系统集成接口
+
+# Logical Dependency Chain
+## 基础后端架构(1-4周)
+1. 项目初始化和环境配置
+2. 设置用户认证和权限模型
+3. 实现核心数据模型和迁移
+4. 构建基本API框架和路由
+
+## 核心功能实现(5-8周)
+5. 开发课程和资源管理API
+6. 实现AI服务集成基础架构
+7. 构建内容生成API和服务
+8. 开发练习评测API和逻辑
+
+## 功能增强(9-12周)
+9. 优化AI服务性能和缓存
+10. 扩展学情分析功能
+11. 实现批量处理和异步任务
+12. 开发统计和报表API
+
+## 系统完善(13-16周)
+13. 安全审计和性能优化
+14. 完善文档和API规范
+15. 开发自动化测试
+16. 部署流程优化
+
+# Risks and Mitigations  
+## 技术挑战
+- **风险**: AI API响应时间可能导致用户体验问题
+  **缓解**: 实现异步处理和结果缓存机制，针对常见请求预生成内容
+
+- **风险**: 大模型API成本随使用量增长
+  **缓解**: 设计智能缓存策略，实现请求合并和优化，监控并设置使用限额
+
+- **风险**: 学生答案评测准确性存在技术挑战
+  **缓解**: 结合规则引擎和AI评分，允许人工干预和反馈机制完善算法
+
+## 后端系统风险
+- **风险**: 数据库性能随用户增长可能面临瓶颈
+  **缓解**: 优化查询，实现适当的索引和缓存，设计分库分表方案
+
+- **风险**: API请求量突增可能导致系统不稳定
+  **缓解**: 实现请求限流，资源自动扩展，负载均衡和故障转移
+
+- **风险**: 敏感数据安全和隐私保护
+  **缓解**: 严格的权限控制，数据加密，审计日志，合规检查
+
+## 开发资源约束
+- **风险**: 后端开发工作量大，资源有限
+  **缓解**: 合理分期，优先核心功能，充分利用Django现成组件
+
+- **风险**: AI模型调优需要专业知识
+  **缓解**: 封装通用AI服务接口，专注于提示词优化而非模型本身
+
+# Appendix  
+## 后端技术规范
+- Python 3.9+
+- Django 4.2+
+- Django REST Framework
+- SQLite (开发) / PostgreSQL (可选生产环境)
+- AI API规范和认证
+- RESTful API命名和版本控制规范
+
+## 重要依赖库
+```
+django==4.2.5
+djangorestframework==3.14.0
+requests==2.31.0
+python-dotenv==1.0.0
+pyjwt==2.8.0
+```
+
+## 环境变量配置示例
+```
+# Django配置
+SECRET_KEY=your_secret_key
+DEBUG=False
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+# AI服务配置
+AI_API_KEY=your_api_key
+AI_API_URL=https://api.provider.com/v1/completions
+AI_MODEL=gpt-3.5-turbo
+AI_CACHE_ENABLED=True
+AI_MAX_TOKENS=2000
+```
+</PRD>
